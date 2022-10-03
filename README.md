@@ -108,7 +108,7 @@ How?
        stdout {}
        http {
            url => "${MICROSOFT_TEAMS_WEBHOOK}"
-           proxy => "${HTTP_PROXY}"
+           #proxy => "${HTTP_PROXY}"
            http_method => "post"
            content_type => "json"
            format => "message"
