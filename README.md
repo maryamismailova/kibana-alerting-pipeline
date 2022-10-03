@@ -1,4 +1,4 @@
-# Kibana Alerting for Community Edition
+# Kibana Alerting for Free Version
 
 ## Description
 
