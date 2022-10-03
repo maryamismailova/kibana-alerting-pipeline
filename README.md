@@ -86,12 +86,12 @@ How?
        input {
        elasticsearch {
            hosts => "${ELASTICSEARCH_HOSTS}"
-           ssl => true
-           ca_file => "/usr/share/certs/elasticsearch-ca.pem"
-           user => "${ELASTICSEARCH_USERNAME}"
-           password => "${ELASTICSEARCH_PASSWORD}"
+           #ssl => true
+           #ca_file => "/usr/share/certs/elasticsearch-ca.pem"
+           #user => "${ELASTICSEARCH_USERNAME}"
+           #password => "${ELASTICSEARCH_PASSWORD}"
            index => "${ELASTICSEARCH_INPUT_INDEX}"
-           query => '{"query":{"range":{"date":{"gte":"now-60s"}}}}'
+           query => '{"query":{"range":{"date":{"gte":"now-70s"}}}}'
            schedule => "* * * * *"
            size => 500
            scroll => "1m"
