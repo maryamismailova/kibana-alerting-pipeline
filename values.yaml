@@ -3,7 +3,7 @@ image: "docker.elastic.co/logstash/logstash"
 
 extraEnvs:
   - name: ELASTICSEARCH_HOSTS
-    value: "data-0.data-headless.elastic:9200,data-1.data-headless.elastic:9200,data-2.data-headless.elastic:9200"
+    value: "data-0.data-headless.elastic:9200 data-1.data-headless.elastic:9200 data-2.data-headless.elastic:9200"
   - name: ELASTICSEARCH_INPUT_INDEX
     value: "alert-notifications"
   # - name: ELASTICSEARCH_USERNAME

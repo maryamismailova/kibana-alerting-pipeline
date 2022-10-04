@@ -8,19 +8,23 @@ It is configured for a specific use case with Microsoft Teams, however, feel fre
 
 Why this?
 
-- Kibana/Observability provides a way to alert on log entries ([Alert rules and connectors](https://www.elastic.co/guide/en/kibana/current/alerting-getting-started.html)). This is something you might want to use once you have some valuable logging and log parsing configured.
+- I needed a way to get notified on certain events in application logs. Since application logs were shipped to Elasticsearch, and Kibana was used for visualizations, a way was needed to reuse the stack for alerting.
 
-  Of course, one could simply avoid using Kibana UI and directly integrate any tool like logstash to monitor Elasticsearch data and apply some alert conditions from logstash.
+    Kibana/Observability provides a way to alert on log entries ([Alert rules and connectors](https://www.elastic.co/guide/en/kibana/current/alerting-getting-started.html)). 
 
-  However, I wanted to give a possibility for any qualified user/developer to create alert he/she needs, without the need to deploy/update any resources(and thus potentially break it) in infrastructure.
+  Of course, one could simply avoid using Kibana and directly integrate any tool like logstash to monitor Elasticsearch data and apply some alert logic from logstash.
+
+  However, I wanted to give a possibility for any qualified user/developer to create alert he/she needs, without the need to deploy/update any resources(and thus potentially break it) in infrastructure. Only knowing what template to insert into alert rules is required to use this mechanism.
 
   Also, Kibana Alert rules provide quite an intuitive way to configure them.
 
 How?
 
-- However, Kibana community edition only provides log and index connectors for integration with notification channels. Leaving only the index connector as a valuable option for any sort of alerting, it was required to configure my way to watch elasticsearch index. Another point to consider was choosing a tool that would have an extensive set of integrations with third parties. A solution to this is [Logstash](https://www.elastic.co/guide/en/logstash/current/output-plugins.html).
+- Unfortunately, Kibana's free version only provides log and index connectors for integration with notification channels. This left only the index connector as a valuable option for any sort of alerting. Therefor it was required to configure some way to watch elasticsearch index. Another point to consider was choosing a tool that would have an extensive set of integrations with third parties for notification purposes. A solution to this is [Logstash](https://www.elastic.co/guide/en/logstash/current/output-plugins.html).
 
-  Kibana evaluates the alert rules and writes to the index using the index connector. Logstash periodically monitors the index, and once new data is written it is passed to http output plugin, which is configured for Microsoft Teams alerting.
+  The way it works:
+  
+  Kibana evaluates the alert rules and writes to the index using the index connector. Logstash periodically monitors the index for unprocessed alerts. As soons as a new alert enters the index, it gets processed by logstash and sent to output(configured for Microsoft Teams channel). Additionally in order to avoid duplicate or missing notifications, logstash updates the processed alerts with "is_read" field.
 
 ## Steps
 
@@ -33,11 +37,11 @@ How?
 
 1. Create an Index connector in Kibana Stack Management/Rules and Connectors
 
-   - Write to index `alert-notifications`
+   - Write to index `alert-notifications` (or any other index, might require small changes in configurations)
 
 2. Create a kibana rule:
 
-   - Check every - 1 minute
+   - Check every - 1 minute (Frequency of checks can be of any other value)
    - Notify - Only on status change
    - Log threshold - according to your alerting needs. Can be anything.
    - Actions on alerts:
@@ -48,7 +52,7 @@ How?
    "summary": "<YOUR SHORT ALERT DESCRIPTION>"
    "rule_id": "{{rule.id}}",
    "rule_name": "{{rule.name}}",
-   "date": "{{context.timestamp}}",
+   "@timestamp": "{{context.timestamp}}",
    "alert_id": "{{alert.id}}",
    "context_conditions": "{{context.conditions}}",
    "context_matching": "{{context.matchingDocuments}}",
@@ -59,7 +63,7 @@ How?
    "summary": "YOUR SHORT ALERT DESCRIPTION"
    "rule_id": "{{rule.id}}",
    "rule_name": "{{rule.name}}",
-   "date": "{{context.timestamp}}",
+   "@timestamp": "{{context.timestamp}}",
    "alert_id": "{{alert.id}}",
    "context_conditions": "{{context.conditions}}",
    "context_matching": "{{context.matchingDocuments}}",
@@ -68,60 +72,80 @@ How?
    ```
 
    - These rule actions can be reused by different alerts and then collected by Logstash
-   - Consider setting _summary_ that best describes what the alert is for. As its value will be used in alert notifications later.
+   - Consider setting _summary_ with a string that best describes what the alert is for. As its value will be used in alert notifications later.
 
 ## Logstash for notifications
 
-1. Deploy Logstash helm chart with configuration files in:
+1. Deploy Logstash helm chart with below configuration files. You might wish to go through them, and update according to your needs:
 
    - [values.yaml](./values.yaml)
    - [configs/logstash.conf and configs/logstash.yml](./configs/)
 
-   - [upgrade.sh](./upgrade.sh) can be used. (need to set http_proxy variable first)
+   - [upgrade.sh](./upgrade.sh) can be used.
 
 2. Logstash configuration example:
    ```
-   logstashPipeline:
-   logstash.conf: |
-       input {
-       elasticsearch {
-           hosts => "${ELASTICSEARCH_HOSTS}"
-           #ssl => true
-           #ca_file => "/usr/share/certs/elasticsearch-ca.pem"
-           #user => "${ELASTICSEARCH_USERNAME}"
-           #password => "${ELASTICSEARCH_PASSWORD}"
-           index => "${ELASTICSEARCH_INPUT_INDEX}"
-           query => '{"query":{"range":{"date":{"gte":"now-70s"}}}}'
-           schedule => "* * * * *"
-           size => 500
-           scroll => "1m"
-           docinfo => true
-           docinfo_target => "[@metadata][doc]"
-       }
-       }
-       filter {
-       json {
-           source => "message"
-       }
-       }
-       output {
-       stdout {}
-       http {
-           url => "${MICROSOFT_TEAMS_WEBHOOK}"
-           #proxy => "${HTTP_PROXY}"
-           http_method => "post"
-           content_type => "json"
-           format => "message"
-           message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date","value":"%{date}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
-       }
-       }
+    logstashPipeline:
+        logstash.conf: |
+            input {
+                elasticsearch {
+                    hosts => "${ELASTICSEARCH_HOSTS}"
+                    #ssl => true
+                    #ca_file => "/usr/share/certs/elasticsearch-ca.pem"
+                    #user => "${ELASTICSEARCH_USERNAME}"
+                    #password => "${ELASTICSEARCH_PASSWORD}"
+                    index => "${ELASTICSEARCH_INPUT_INDEX}"
+                    query => '{"query":{"bool":{"must_not":[{"exists":{"field":"is_read"}}],"must":[{"range":{"@timestamp":{"gte":"now-1h"}}}]}}}'
+                    schedule => "* * * * *"
+                    size => 500
+                    scroll => "1m"
+                    docinfo => true
+                    docinfo_target => "[@metadata][doc]"
+                }
+            }
+            filter {
+                json {
+                    source => "message"
+                }
+                mutate {
+                    replace => {"is_read"=> "true"}
+                }
+            }
+            output {
+                stdout {}
+                http {
+                    url => "${MICROSOFT_TEAMS_WEBHOOK}"
+                    #proxy => "${HTTP_PROXY}"
+                    http_method => "post"
+                    automatic_retries => 5
+                    retry_failed => false
+                    content_type => "json"
+                    format => "message"
+                    message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date (UTC)","value":"%{@timestamp}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
+                }
+                elasticsearch {
+                    hosts => "${ELASTICSEARCH_HOSTS}"
+                    #ssl => true
+                    #cacert => "/usr/share/certs/elasticsearch-ca.pem"
+                    #user => "${ELASTICSEARCH_USERNAME}"
+                    #password => "${ELASTICSEARCH_PASSWORD}"
+                
+                    retry_on_conflict => 5
+                    index => "${ELASTICSEARCH_INPUT_INDEX}"
+                    document_type => "%{[@metadata][doc][_type]}"
+                    document_id => "%{[@metadata][doc][_id]}"
+                    action => "update"
+                    
+                }
+            }
+
    ```
 
 - The above configuration has an input plugin, which connects to elasticsearch and reads from the index alias(or index itself) that is provided as an environment variable.
-- The read of an index is triggered every 60-70 seconds (From experience setting 60 can result in losing some of the alert notifications. The value may be modified in elasticsearch.query section)
+- Elasticsearch index read is scheduled for every minute.
 - The output plugin is configured specifically for Microsoft Teams channel. The string in output.http.message is an action card template that creates messages like:
   ![Example message received from logstash](images/MicrosoftTeamsAlertNotification.jpg)
-- I have commented SSL related parts of logstash configuration [logstash.conf](configs/logstash.conf) & [values.yaml](values.yaml). Uncomment and update them if your Elasticsearch cluster is configured for secure communications.
+- SSL related parts of logstash configuration [logstash.conf](configs/logstash.conf) & [values.yaml](values.yaml) are commented out. Uncomment and update them if your Elasticsearch cluster is configured for secure communications.
 
 ## (Optional) Deploy Logstash and Kibana connector with a script
 
