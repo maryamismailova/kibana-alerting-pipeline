@@ -45,10 +45,11 @@ How?
    ```
    # For Firing
    {
-   "summary": "<YOUR SHORT ALERT DESCRIPTION>"
+   "summary": "<YOUR SHORT ALERT SUMMARY>"
+   "alert_description": "<MORE DETAILED ALERT DESCRIPTION>"
    "rule_id": "{{rule.id}}",
    "rule_name": "{{rule.name}}",
-   "date": "{{context.timestamp}}",
+   "@timestamp": "{{context.timestamp}}",
    "alert_id": "{{alert.id}}",
    "context_conditions": "{{context.conditions}}",
    "context_matching": "{{context.matchingDocuments}}",
@@ -56,10 +57,11 @@ How?
    }
    # For Resolving
    {
-   "summary": "YOUR SHORT ALERT DESCRIPTION"
+   "summary": "<YOUR SHORT ALERT SUMMARY>"
+   "alert_description": "<MORE DETAILED ALERT DESCRIPTION>"
    "rule_id": "{{rule.id}}",
    "rule_name": "{{rule.name}}",
-   "date": "{{context.timestamp}}",
+   "@timestamp": "{{context.timestamp}}",
    "alert_id": "{{alert.id}}",
    "context_conditions": "{{context.conditions}}",
    "context_matching": "{{context.matchingDocuments}}",
@@ -112,7 +114,7 @@ How?
            http_method => "post"
            content_type => "json"
            format => "message"
-           message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date","value":"%{date}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
+           message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{alert_status}: %{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Description","value":"%{alert_description}"},{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date(UTC)","value":"%{@timestamp}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
        }
        }
    ```
