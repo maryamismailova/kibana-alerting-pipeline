@@ -18,19 +18,15 @@ then
     --header "Authorization: $API_KEY" \
     --header 'kbn-xsrf: true' \
     --header 'Content-Type: application/json' \
-    --data "{
-        \"name\": \"$CONNECTOR_NAME\",
-        \"connector_type_id\": \".index\",
-        \"config\": {
-            \"index\": \"$INDEX_NAME\"
-        }
-    }"`
+    --data "{ \"name\": \"$CONNECTOR_NAME\",\"connector_type_id\": \".index\",\"config\": {\"index\": \"$INDEX_NAME\"}}"\
+    `
     if [ $? -ne 0 ];
     then
         log "Failed to create connector $CONNECTOR_NAME" "ERROR"
         exit 1
     fi
 fi
+
 connector_id=`echo $connector_response  | jq -r ".id"`
 
 log "Connector exists"
