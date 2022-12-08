@@ -10,7 +10,7 @@ Why this?
 
 - I needed a way to get notified on certain events in application logs. Since application logs were shipped to Elasticsearch, and Kibana was used for visualizations, a way was needed to reuse the stack for alerting.
 
-    Kibana/Observability provides a way to alert on log entries ([Alert rules and connectors](https://www.elastic.co/guide/en/kibana/current/alerting-getting-started.html)). 
+  Kibana/Observability provides a way to alert on log entries ([Alert rules and connectors](https://www.elastic.co/guide/en/kibana/current/alerting-getting-started.html)).
 
   Of course, one could simply avoid using Kibana and directly integrate any tool like logstash to monitor Elasticsearch data and apply some alert logic from logstash.
 
@@ -23,7 +23,7 @@ How?
 - Unfortunately, Kibana's free version only provides log and index connectors for integration with notification channels. This left only the index connector as a valuable option for any sort of alerting. Therefor it was required to configure some way to watch elasticsearch index. Another point to consider was choosing a tool that would have an extensive set of integrations with third parties for notification purposes. A solution to this is [Logstash](https://www.elastic.co/guide/en/logstash/current/output-plugins.html).
 
   The way it works:
-  
+
   Kibana evaluates the alert rules and writes to the index using the index connector. Logstash periodically monitors the index for unprocessed alerts. As soons as a new alert enters the index, it gets processed by logstash and sent to output(configured for Microsoft Teams channel). Additionally in order to avoid duplicate or missing notifications, logstash updates the processed alerts with "is_read" field.
 
 ## Steps
@@ -86,41 +86,61 @@ How?
    - [upgrade.sh](./upgrade.sh) can be used.
 
 2. Logstash configuration example:
+
    ```
-   logstashPipeline:
-   logstash.conf: |
-       input {
-       elasticsearch {
-           hosts => "${ELASTICSEARCH_HOSTS}"
-           #ssl => true
-           #ca_file => "/usr/share/certs/elasticsearch-ca.pem"
-           #user => "${ELASTICSEARCH_USERNAME}"
-           #password => "${ELASTICSEARCH_PASSWORD}"
-           index => "${ELASTICSEARCH_INPUT_INDEX}"
-           query => '{"query":{"range":{"date":{"gte":"now-70s"}}}}'
-           schedule => "* * * * *"
-           size => 500
-           scroll => "1m"
-           docinfo => true
-           docinfo_target => "[@metadata][doc]"
-       }
-       }
-       filter {
-       json {
-           source => "message"
-       }
-       }
-       output {
-       stdout {}
-       http {
-           url => "${MICROSOFT_TEAMS_WEBHOOK}"
-           #proxy => "${HTTP_PROXY}"
-           http_method => "post"
-           content_type => "json"
-           format => "message"
-           message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{alert_status}: %{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Description","value":"%{alert_description}"},{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date(UTC)","value":"%{@timestamp}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
-       }
-       }
+    logstashPipeline:
+        logstash.conf: |
+            input {
+            elasticsearch {
+                hosts => "${ELASTICSEARCH_HOSTS}"
+                #ssl => true
+                #ca_file => "/usr/share/certs/elasticsearch-ca.pem"
+                #user => "${ELASTICSEARCH_USERNAME}"
+                #password => "${ELASTICSEARCH_PASSWORD}"
+                index => "${ELASTICSEARCH_INPUT_INDEX}"
+                query => '{"query":{"bool":{"must_not":[{"exists":{"field":"is_read"}}],"must":[{"range":{"@timestamp":{"gte":"now-1h"}}}]}}}'
+                schedule => "* * * * *"
+                size => 500
+                scroll => "1m"
+                docinfo => true
+                docinfo_target => "[@metadata][doc]"
+            }
+            }
+            filter {
+            json {
+                source => "message"
+            }
+            mutate {
+                replace => {"is_read"=> "true"}
+            }
+            }
+            output {
+            stdout {}
+            http {
+                url => "${MICROSOFT_TEAMS_WEBHOOK}"
+                #proxy => "${HTTP_PROXY}"
+                http_method => "post"
+                automatic_retries => 5
+                retry_failed => false
+                content_type => "json"
+                format => "message"
+                message => '{"@type":"MessageCard","@context":"http://schema.org/extensions","themeColor":"0076D7","summary":"%{alert_status}: %{summary}","sections":[{"activityTitle":"%{alert_status}: %{summary} in %{alert_id}","activitySubtitle":"%{alert_id}","activityImage":"https://brandslogos.com/wp-content/uploads/images/large/elastic-kibana-logo.png","facts":[{"name":"Description","value":"%{alert_description}"},{"name":"Alert conditions","value":"%{context_conditions}"},{"name":"Alerted value","value":"%{context_matching}"},{"name":"Date(UTC)","value":"%{@timestamp}"},{"name":"Status","value":"%{alert_status}"}],"markdown":true}]}'
+            }
+            elasticsearch {
+                hosts => "${ELASTICSEARCH_HOSTS}"
+                #ssl => true
+                #cacert => "/usr/share/certs/elasticsearch-ca.pem"
+                #user => "${ELASTICSEARCH_USERNAME}"
+                #password => "${ELASTICSEARCH_PASSWORD}"
+
+                retry_on_conflict => 5
+                index => "${ELASTICSEARCH_INPUT_INDEX}"
+                document_type => "%{[@metadata][doc][_type]}"
+                document_id => "%{[@metadata][doc][_id]}"
+                action => "update"
+            }
+            }
+
    ```
 
 - The above configuration has an input plugin, which connects to elasticsearch and reads from the index alias(or index itself) that is provided as an environment variable.
