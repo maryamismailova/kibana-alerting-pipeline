@@ -38,6 +38,7 @@ How?
 1. Create an Index connector in Kibana Stack Management/Rules and Connectors
 
    - Write to index `alert-notifications` (or any other index, might require small changes in configurations)
+   - Check 'Define time field for each document'
 
 2. Create a kibana rule:
 
